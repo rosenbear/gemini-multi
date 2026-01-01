@@ -2,457 +2,823 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Pro Pencil Board</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brush Studio App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        :root {
-            --toolbar-bg: rgba(40, 40, 40, 0.95);
-            --active-color: #007AFF;
+        body {
+            overscroll-behavior: none;
+            touch-action: none;
         }
-
-        * {
-            box-sizing: border-box;
-            -webkit-user-select: none;
-            user-select: none;
-            -webkit-touch-callout: none;
-            -webkit-tap-highlight-color: transparent;
+        .canvas-bg {
+            background-color: #ffffff;
+            background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+            background-size: 20px 20px;
         }
-
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: #555;
-            font-family: -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-            touch-action: none; /* Disables browser gestures */
-        }
-
-        #canvas-container {
-            width: 100%;
-            height: 100%;
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 1;
+        .studio-canvas-container {
+            background-color: white;
+            border: 1px solid #e5e7eb;
             cursor: crosshair;
         }
-
-        /* --- Toolbar --- */
-        .toolbar {
-            position: absolute;
-            top: 24px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--toolbar-bg);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            padding: 8px 16px;
-            border-radius: 50px;
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-            z-index: 100;
-            border: 1px solid rgba(255,255,255,0.1);
+        /* Custom scrollbar for the sidebar */
+        ::-webkit-scrollbar {
+            width: 6px;
         }
-
-        /* Button Styling */
-        .tool-btn {
-            background: #3a3a3a;
-            border: none;
-            color: #eee;
-            width: 48px;
-            height: 48px;
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 3px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
             border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            background: #3b82f6;
+            margin-top: -6px;
             cursor: pointer;
-            position: relative;
-            transition: all 0.1s ease-out;
         }
-
-        /* Visual Feedback for Touch */
-        .tool-btn:active, .tool-btn.pressed {
-            transform: scale(0.9);
-            background-color: #555;
-            color: white;
-        }
-
-        .tool-btn svg {
-            width: 24px;
-            height: 24px;
-            pointer-events: none; /* Ensure clicks pass to button */
-        }
-
-        .separator {
-            width: 1px; 
-            height: 24px; 
-            background: rgba(255,255,255,0.2); 
-            margin: 0 4px;
-        }
-
-        /* Color Picker Reset */
-        .color-wrapper {
-            position: relative;
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            overflow: hidden;
-            border: 2px solid rgba(255,255,255,0.2);
-        }
-        
-        input[type="color"] {
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            border: none;
-            cursor: pointer;
-            padding: 0;
-            margin: 0;
-        }
-
-        .info-panel {
-            position: absolute;
-            bottom: 30px;
-            left: 0;
+        input[type=range]::-webkit-slider-runnable-track {
             width: 100%;
-            text-align: center;
-            color: rgba(255,255,255,0.3);
-            font-size: 13px;
-            font-weight: 500;
-            pointer-events: none;
-            z-index: 5;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+            height: 4px;
+            cursor: pointer;
+            background: #e5e7eb;
+            border-radius: 2px;
         }
-
+        /* Swatch Styles */
+        .swatch {
+            transition: transform 0.1s, border-color 0.1s;
+        }
+        .swatch.active {
+            transform: scale(1.1);
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+        }
     </style>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
-<body>
+<body class="bg-gray-100 h-screen w-screen flex overflow-hidden font-sans text-gray-800">
 
-    <div id="canvas-container">
-        <canvas id="mainCanvas"></canvas>
-    </div>
-
-    <div class="toolbar">
-        <div class="color-wrapper">
-            <input type="color" id="colorPicker" value="#000000">
+    <!-- Sidebar / Tools -->
+    <div class="w-96 flex-shrink-0 bg-white shadow-lg flex flex-col h-full z-10 border-r border-gray-200">
+        <!-- Header -->
+        <div class="p-4 border-b border-gray-200 bg-gray-50">
+            <h1 class="text-xl font-bold text-gray-800 mb-1"><i class="fas fa-paint-brush mr-2 text-blue-500"></i>Brush Studio</h1>
+            <p class="text-xs text-gray-500">Design your own brush tips</p>
         </div>
-        
-        <div class="separator"></div>
 
-        <button class="tool-btn" id="undoBtn" aria-label="Undo">
-            <i data-lucide="undo-2"></i>
-        </button>
-        <button class="tool-btn" id="redoBtn" aria-label="Redo">
-            <i data-lucide="redo-2"></i>
-        </button>
-        
-        <div class="separator"></div>
+        <!-- Main Controls -->
+        <div class="p-4 grid grid-cols-2 gap-2 border-b border-gray-200">
+            <button id="btn-brush" class="flex items-center justify-center py-2 px-3 bg-blue-600 text-white rounded hover:bg-blue-700 transition active-tool" onclick="setTool('brush')">
+                <i class="fas fa-pen mr-2"></i> Brush
+            </button>
+            <button id="btn-eraser" class="flex items-center justify-center py-2 px-3 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition" onclick="setTool('eraser')">
+                <i class="fas fa-eraser mr-2"></i> Eraser
+            </button>
+            
+            <div class="col-span-2 mt-2">
+                <label class="text-xs font-bold text-gray-500 uppercase">Brush Size: <span id="size-display">40</span>px</label>
+                <input type="range" id="main-brush-size" min="5" max="150" value="40" class="w-full mt-1 appearance-none bg-transparent">
+            </div>
 
-        <button class="tool-btn" id="resetViewBtn" aria-label="Reset View">
-            <i data-lucide="maximize"></i>
-        </button>
-        <button class="tool-btn" id="clearBtn" aria-label="Clear" style="color: #ff6b6b;">
-            <i data-lucide="trash-2"></i>
-        </button>
+            <div class="col-span-2 mt-1">
+                <label class="text-xs font-bold text-gray-500 uppercase">Spacing: <span id="spacing-display">5</span>%</label>
+                <input type="range" id="brush-spacing" min="2" max="25" value="5" class="w-full mt-1 appearance-none bg-transparent">
+            </div>
+
+            <div class="col-span-2 mt-1">
+                <label class="text-xs font-bold text-gray-500 uppercase">Flow: <span id="flow-display">0</span> stamps/sec</label>
+                <input type="range" id="brush-flow" min="0" max="200" step="0.1" value="0" class="w-full mt-1 appearance-none bg-transparent">
+            </div>
+
+            <button onclick="undo()" class="col-span-2 mt-2 flex items-center justify-center py-2 px-3 bg-gray-100 border border-gray-300 text-gray-700 rounded hover:bg-gray-200 transition">
+                <i class="fas fa-undo mr-2"></i> Undo
+            </button>
+            <button onclick="clearAll()" class="col-span-2 mt-1 flex items-center justify-center py-1 px-3 text-red-500 text-sm hover:text-red-700 transition">
+                <i class="fas fa-trash-alt mr-2"></i> Clear Canvas
+            </button>
+        </div>
+
+        <!-- Studios List -->
+        <div class="flex-1 overflow-y-auto p-4 bg-gray-50">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-sm font-bold text-gray-600 uppercase">Active Studios (<span id="studio-count">1</span>/5)</h2>
+            </div>
+            
+            <div id="studios-container" class="grid grid-cols-2 gap-2">
+                <!-- Studio items will be injected here -->
+            </div>
+            
+            <button id="add-studio-btn" onclick="addStudio()" class="w-full mt-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-400 hover:border-blue-400 hover:text-blue-500 transition flex items-center justify-center">
+                <i class="fas fa-plus mr-2"></i> Add Brush Studio
+            </button>
+        </div>
     </div>
 
-    <div class="info-panel">
-        1 Finger/Pencil to Draw &bull; 2 Fingers to Pan & Zoom
+    <!-- Main Canvas Area -->
+    <div class="flex-1 relative bg-gray-200 h-full flex flex-col">
+        <div class="absolute inset-4 bg-white shadow-sm rounded-lg overflow-hidden cursor-crosshair canvas-bg" id="canvas-wrapper">
+            
+            <canvas id="main-canvas"></canvas>
+
+            <!-- Value Swatches UI -->
+            <div class="absolute top-4 left-4 flex flex-col gap-2 p-2 bg-white/90 backdrop-blur rounded-lg shadow border border-gray-200 z-20">
+                <div class="text-[10px] font-bold text-gray-400 uppercase text-center mb-1">Values</div>
+                
+                <div class="flex gap-2">
+                    <!-- Swatch 1 (Dark) -->
+                    <div class="relative group">
+                        <div id="swatch-1" class="swatch w-10 h-10 rounded border-2 border-white shadow cursor-pointer active" onclick="openValueSlider(1)"></div>
+                        <span class="absolute -bottom-4 left-1/2 transform -translate-x-1/2 text-[10px] text-gray-500 font-bold">1</span>
+                    </div>
+
+                    <!-- Swatch 2 (Medium) -->
+                    <div class="relative group">
+                        <div id="swatch-2" class="swatch w-10 h-10 rounded border-2 border-white shadow cursor-pointer" onclick="openValueSlider(2)"></div>
+                        <span class="absolute -bottom-4 left-1/2 transform -translate-x-1/2 text-[10px] text-gray-500 font-bold">2</span>
+                    </div>
+
+                    <!-- Swatch 3 (Light) -->
+                    <div class="relative group">
+                        <div id="swatch-3" class="swatch w-10 h-10 rounded border-2 border-white shadow cursor-pointer" onclick="openValueSlider(3)"></div>
+                        <span class="absolute -bottom-4 left-1/2 transform -translate-x-1/2 text-[10px] text-gray-500 font-bold">3</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Value Adjustment Slider Popup (Hidden by default) -->
+            <div id="value-slider-popup" class="hidden absolute top-24 left-4 p-3 bg-white shadow-xl rounded-lg border border-gray-200 z-30 w-48">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-gray-600">Adjust Value <span id="popup-swatch-id">#1</span></span>
+                    <button onclick="closeValueSlider()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                </div>
+                <input type="range" id="popup-slider" min="0" max="255" class="w-full">
+            </div>
+
+        </div>
+        <div class="absolute bottom-6 right-6 bg-white/90 backdrop-blur px-3 py-1 rounded-full shadow text-xs text-gray-500 pointer-events-none">
+            Canvas Active
+        </div>
     </div>
+
+    <!-- Template for a Studio Card (Hidden) -->
+    <template id="studio-template">
+        <div class="studio-card bg-white p-2 rounded-lg shadow-sm border border-gray-200 relative group transition-all duration-200 hover:shadow-md">
+            <div class="flex justify-between items-start mb-1">
+                <span class="text-[10px] font-bold text-gray-500 studio-label uppercase tracking-wider">Studio #1</span>
+                <div class="flex gap-1">
+                    <button class="clear-studio-btn text-gray-400 hover:text-red-500 p-0.5" title="Clear Studio">
+                        <i class="fas fa-trash-alt text-[10px]"></i>
+                    </button>
+                    <button class="remove-studio-btn text-gray-300 hover:text-red-500 p-0.5 hidden" title="Remove Studio">
+                        <i class="fas fa-times text-[10px]"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Drawing Area for Studio -->
+            <div class="relative w-full aspect-square mb-2 studio-canvas-container rounded overflow-hidden">
+                <canvas class="studio-canvas absolute inset-0 w-full h-full"></canvas>
+                <!-- Helper text, disappears on draw -->
+                <div class="pointer-events-none absolute inset-0 flex items-center justify-center text-gray-300 text-[10px] italic empty-hint">
+                    Draw
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div>
+                <div class="flex justify-between text-[10px] text-gray-500 mb-0.5">
+                    <span>Prob.</span>
+                    <span class="prob-display">100%</span>
+                </div>
+                <input type="range" class="prob-slider w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer" min="0" max="100" value="50">
+            </div>
+            
+            <!-- Add Button inside card as requested -->
+            <button class="add-linked-btn absolute -right-2 top-1/2 transform -translate-y-1/2 w-5 h-5 bg-blue-500 text-white rounded-full shadow hover:bg-blue-600 flex items-center justify-center z-10 hidden border-2 border-white" title="Open another Studio">
+                <i class="fas fa-plus text-[10px]"></i>
+            </button>
+        </div>
+    </template>
 
     <script>
-        // Initialize Icons
-        lucide.createIcons();
-
-        // --- Config ---
-        const ARTBOARD_W = 2048;
-        const ARTBOARD_H = 2732;
-        const MAX_HISTORY = 50; // Keep 50 strokes in memory
-        
-        // --- State ---
-        const canvas = document.getElementById('mainCanvas');
-        // Removed 'desynchronized' to ensure maximum compatibility with standard rendering loops
-        const ctx = canvas.getContext('2d', { alpha: false }); 
-        
-        // Data Structures
-        let strokes = [];
-        let redoStack = [];
-        
-        // Viewport (Camera)
-        let camera = { x: window.innerWidth/2, y: window.innerHeight/2, zoom: 0.35, angle: 0 };
-        
-        // Interaction
-        let activePointers = new Map();
-        let isDrawing = false;
-        let currentStroke = null;
-        let brushColor = '#000000';
-        let brushSize = 4;
-
-        // --- Setup ---
-        function resize() {
-            const dpr = window.devicePixelRatio || 1;
-            canvas.width = window.innerWidth * dpr;
-            canvas.height = window.innerHeight * dpr;
-            canvas.style.width = window.innerWidth + 'px';
-            canvas.style.height = window.innerHeight + 'px';
-            ctx.scale(1, 1); // Reset default scale
-            requestAnimationFrame(draw);
-        }
-        window.addEventListener('resize', resize);
-        resize();
-
-        // --- Core Rendering ---
-        function draw() {
-            // 1. Reset & Clear
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            ctx.fillStyle = '#555555';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // 2. Apply Camera Transform
-            // We use standard 2D transforms. 
-            // Translate to center -> Rotate -> Scale -> Translate back
-            const dpr = window.devicePixelRatio;
-            
-            ctx.translate(camera.x * dpr, camera.y * dpr);
-            ctx.rotate(camera.angle);
-            ctx.scale(camera.zoom, camera.zoom);
-
-            // 3. Draw Artboard (The Paper)
-            ctx.fillStyle = '#ffffff';
-            ctx.shadowColor = 'rgba(0,0,0,0.5)';
-            ctx.shadowBlur = 100 * camera.zoom; // Scale shadow with zoom for realism
-            ctx.fillRect(-ARTBOARD_W/2, -ARTBOARD_H/2, ARTBOARD_W, ARTBOARD_H);
-            ctx.shadowBlur = 0;
-
-            // 4. Draw Strokes
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-
-            // Helper to render a single stroke path
-            const renderStroke = (s) => {
-                if(s.points.length === 0) return;
-
-                ctx.beginPath();
-                ctx.strokeStyle = s.color;
-                ctx.fillStyle = s.color;
-                ctx.lineWidth = s.size;
-
-                if (s.points.length === 1) {
-                    // Draw Dot
-                    ctx.arc(s.points[0].x, s.points[0].y, s.size/2, 0, Math.PI*2);
-                    ctx.fill();
-                } else {
-                    // Draw Line
-                    ctx.moveTo(s.points[0].x, s.points[0].y);
-                    // Smooth curves using quadratic Bezier
-                    for (let i = 1; i < s.points.length - 1; i++) {
-                        const p1 = s.points[i];
-                        const p2 = s.points[i+1];
-                        const midX = (p1.x + p2.x) / 2;
-                        const midY = (p1.y + p2.y) / 2;
-                        ctx.quadraticCurveTo(p1.x, p1.y, midX, midY);
-                    }
-                    // Connect last point
-                    const last = s.points[s.points.length-1];
-                    ctx.lineTo(last.x, last.y);
-                    ctx.stroke();
-                }
-            };
-
-            // Batch render static strokes
-            for(let s of strokes) renderStroke(s);
-            
-            // Render active stroke
-            if(currentStroke) renderStroke(currentStroke);
-        }
-
-
-        // --- Coordinate Math ---
-        function toWorld(screenX, screenY) {
-            const dpr = window.devicePixelRatio;
-            // 1. Translate relative to camera center
-            let x = (screenX * dpr) - (camera.x * dpr);
-            let y = (screenY * dpr) - (camera.y * dpr);
-            
-            // 2. Un-rotate
-            const cos = Math.cos(-camera.angle);
-            const sin = Math.sin(-camera.angle);
-            let rx = x * cos - y * sin;
-            let ry = x * sin + y * cos;
-
-            // 3. Un-scale
-            return { x: rx / camera.zoom, y: ry / camera.zoom };
-        }
-
-        // --- Interaction Logic ---
-        
-        // Gesture State
-        let prevDist = 0;
-        let prevAngle = 0;
-        let prevMid = {x:0, y:0};
-
-        canvas.addEventListener('pointerdown', e => {
-            // Important: We capture pointer to track it even if it leaves canvas bounds
-            canvas.setPointerCapture(e.pointerId);
-            activePointers.set(e.pointerId, e);
-
-            if (activePointers.size === 1) {
-                // START DRAWING
-                const pos = toWorld(e.clientX, e.clientY);
-                const pressure = e.pressure || 0.5;
-                
-                isDrawing = true;
-                currentStroke = {
-                    color: brushColor,
-                    size: brushSize * (0.5 + pressure), // Simple pressure dynamics
-                    points: [{x: pos.x, y: pos.y}]
-                };
-            } else if (activePointers.size === 2) {
-                // START GESTURE (Cancel drawing)
-                isDrawing = false;
-                currentStroke = null;
-                
-                // Init Gesture Math
-                const p = Array.from(activePointers.values());
-                prevDist = Math.hypot(p[0].clientX - p[1].clientX, p[0].clientY - p[1].clientY);
-                prevAngle = Math.atan2(p[1].clientY - p[0].clientY, p[1].clientX - p[0].clientX);
-                prevMid = {
-                    x: (p[0].clientX + p[1].clientX)/2, 
-                    y: (p[0].clientY + p[1].clientY)/2
-                };
-            }
-            requestAnimationFrame(draw);
-        });
-
-        canvas.addEventListener('pointermove', e => {
-            if (!activePointers.has(e.pointerId)) return;
-            activePointers.set(e.pointerId, e);
-
-            if (activePointers.size === 1 && isDrawing && currentStroke) {
-                // DRAWING
-                // Use Coalesced Events for 120Hz smooth curves on iPad
-                const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
-                
-                for(let ev of events) {
-                    const pos = toWorld(ev.clientX, ev.clientY);
-                    currentStroke.points.push({x: pos.x, y: pos.y});
-                }
-            } 
-            else if (activePointers.size === 2) {
-                // PAN / ZOOM / ROTATE
-                const p = Array.from(activePointers.values());
-                const curDist = Math.hypot(p[0].clientX - p[1].clientX, p[0].clientY - p[1].clientY);
-                const curAngle = Math.atan2(p[1].clientY - p[0].clientY, p[1].clientX - p[0].clientX);
-                const curMid = {
-                    x: (p[0].clientX + p[1].clientX)/2, 
-                    y: (p[0].clientY + p[1].clientY)/2
-                };
-
-                // 1. Pan
-                const dx = curMid.x - prevMid.x;
-                const dy = curMid.y - prevMid.y;
-                camera.x += dx / window.devicePixelRatio;
-                camera.y += dy / window.devicePixelRatio;
-
-                // 2. Zoom
-                const scale = curDist / prevDist;
-                camera.zoom *= scale;
-                camera.zoom = Math.max(0.05, Math.min(8, camera.zoom)); // Limits
-
-                // 3. Rotate
-                camera.angle += (curAngle - prevAngle);
-
-                // Update prev
-                prevDist = curDist;
-                prevAngle = curAngle;
-                prevMid = curMid;
-            }
-            requestAnimationFrame(draw);
-        });
-
-        const endStroke = (e) => {
-            activePointers.delete(e.pointerId);
-            
-            if (isDrawing && currentStroke) {
-                // Only save if it has points
-                if (currentStroke.points.length > 0) {
-                    strokes.push(currentStroke);
-                    if(strokes.length > MAX_HISTORY) strokes.shift(); // Keep memory clean
-                    redoStack = []; // New action clears redo
-                }
-                currentStroke = null;
-                isDrawing = false;
-            }
-            requestAnimationFrame(draw);
+        // --- State Management ---
+        const state = {
+            tool: 'brush', // 'brush' or 'eraser'
+            isDrawingMain: false,
+            mainBrushSize: 40,
+            brushSpacing: 5, // percentage
+            flowRate: 0, // stamps per second
+            flowInterval: null,
+            studios: [], 
+            history: [],
+            historyStep: -1,
+            maxStudios: 6,
+            values: {
+                1: 30,  // Dark
+                2: 128, // Medium
+                3: 220  // Light
+            },
+            activeValueIndex: 1, // 1, 2, or 3
+            editingValueIndex: null
         };
 
-        canvas.addEventListener('pointerup', endStroke);
-        canvas.addEventListener('pointercancel', endStroke);
-        canvas.addEventListener('pointerout', (e) => {
-            // Only end if we actually left the window/iframe
-            // 'pointerout' can fire when entering a child element, 
-            // but canvas has no children.
-            if (e.relatedTarget === null) endStroke(e); 
-        });
+        // --- DOM Elements ---
+        const mainCanvas = document.getElementById('main-canvas');
+        const mainCtx = mainCanvas.getContext('2d', { willReadFrequently: true });
+        const canvasWrapper = document.getElementById('canvas-wrapper');
+        const studiosContainer = document.getElementById('studios-container');
+        const studioTemplate = document.getElementById('studio-template');
+        const addStudioMainBtn = document.getElementById('add-studio-btn');
+        const sizeDisplay = document.getElementById('size-display');
+        const sizeSlider = document.getElementById('main-brush-size');
+        const spacingDisplay = document.getElementById('spacing-display');
+        const spacingSlider = document.getElementById('brush-spacing');
+        const flowDisplay = document.getElementById('flow-display');
+        const flowSlider = document.getElementById('brush-flow');
+        const popupSlider = document.getElementById('popup-slider');
+        const popup = document.getElementById('value-slider-popup');
+
+        // Helper Canvas for tinting brushes
+        const tintCanvas = document.createElement('canvas');
+        const tintCtx = tintCanvas.getContext('2d', { willReadFrequently: true });
+
+        // --- ID Map System ---
+        // Hidden canvas to track which pixel belongs to which Value ID
+        const idCanvas = document.createElement('canvas');
+        const idCtx = idCanvas.getContext('2d', { willReadFrequently: true });
+
+        // --- Initialization ---
+        function init() {
+            resizeCanvases();
+            window.addEventListener('resize', resizeCanvases);
+            
+            // Initial Studio
+            addStudio(true); 
+
+            // Events for Main Canvas
+            mainCanvas.addEventListener('mousedown', startMainDraw);
+            mainCanvas.addEventListener('mousemove', drawMain);
+            window.addEventListener('mouseup', stopMainDraw);
+            
+            // Touch support
+            mainCanvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                startMainDraw(e.touches[0]);
+            }, { passive: false });
+            mainCanvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                drawMain(e.touches[0]);
+            }, { passive: false });
+            window.addEventListener('touchend', stopMainDraw);
+
+            // Brush Controls
+            sizeSlider.addEventListener('input', (e) => {
+                state.mainBrushSize = parseInt(e.target.value);
+                sizeDisplay.textContent = state.mainBrushSize;
+            });
+
+            spacingSlider.addEventListener('input', (e) => {
+                state.brushSpacing = parseInt(e.target.value);
+                spacingDisplay.textContent = state.brushSpacing;
+            });
+
+            flowSlider.addEventListener('input', (e) => {
+                state.flowRate = parseFloat(e.target.value);
+                flowDisplay.textContent = state.flowRate;
+            });
+
+            // Keyboard Shortcuts
+            window.addEventListener('keydown', (e) => {
+                if (['1', '2', '3'].includes(e.key)) {
+                    selectValue(parseInt(e.key));
+                }
+            });
+
+            // Value Slider Logic
+            popupSlider.addEventListener('input', (e) => {
+                if (state.editingValueIndex) {
+                    let newVal = parseInt(e.target.value);
+                    const idx = state.editingValueIndex;
+                    const buffer = 8; // Buffer to keep values distinct
+
+                    // Constraint Logic: Stop slider before overlapping neighbors
+                    if (idx === 1) {
+                        // 1 must stay below 2
+                        const maxLimit = state.values[2] - buffer;
+                        if (newVal > maxLimit) newVal = maxLimit;
+                    } else if (idx === 2) {
+                        // 2 must stay between 1 and 3
+                        const minLimit = state.values[1] + buffer;
+                        const maxLimit = state.values[3] - buffer;
+                        if (newVal < minLimit) newVal = minLimit;
+                        if (newVal > maxLimit) newVal = maxLimit;
+                    } else if (idx === 3) {
+                        // 3 must stay above 2
+                        const minLimit = state.values[2] + buffer;
+                        if (newVal < minLimit) newVal = minLimit;
+                    }
+
+                    // Force the slider UI to respect the clamped value
+                    if (parseInt(e.target.value) !== newVal) {
+                        e.target.value = newVal;
+                    }
+
+                    updateValue(state.editingValueIndex, newVal);
+                }
+            });
+            popupSlider.addEventListener('change', () => {
+                saveState();
+            });
+
+            updateSwatchUI();
+            saveState(); // Initial state
+        }
+
+        // --- Canvas Resizing ---
+
+        function resizeCanvases() {
+            const rect = canvasWrapper.getBoundingClientRect();
+            
+            // Save contents
+            const tempMain = document.createElement('canvas');
+            const tempId = document.createElement('canvas');
+            tempMain.width = mainCanvas.width;
+            tempMain.height = mainCanvas.height;
+            tempId.width = idCanvas.width;
+            tempId.height = idCanvas.height;
+            
+            if(mainCanvas.width > 0) {
+                tempMain.getContext('2d').drawImage(mainCanvas, 0, 0);
+                tempId.getContext('2d').drawImage(idCanvas, 0, 0);
+            }
+
+            // Resize
+            mainCanvas.width = rect.width;
+            mainCanvas.height = rect.height;
+            idCanvas.width = rect.width;
+            idCanvas.height = rect.height;
+
+            // Restore
+            if (tempMain.width > 0) {
+                 mainCtx.drawImage(tempMain, 0, 0);
+                 idCtx.drawImage(tempId, 0, 0);
+            } else {
+                // Fill white on first init
+                mainCtx.fillStyle = '#ffffff';
+                mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
+                // Clear ID canvas (transparent)
+                idCtx.clearRect(0, 0, idCanvas.width, idCanvas.height);
+            }
+        }
 
 
-        // --- UI Interactions (The Fix) ---
+        // --- Value System Logic ---
 
-        // We use a helper to prevent 'click' lag and issues on iPad
-        function attachFastClick(id, callback) {
-            const btn = document.getElementById(id);
-            // pointerup is more reliable than click for custom UI on touch screens
-            // when preventDefault is used elsewhere
-            btn.addEventListener('pointerup', (e) => {
-                // Visual pop
-                btn.classList.add('pressed');
-                setTimeout(() => btn.classList.remove('pressed'), 150);
-                callback(e);
+        function selectValue(index) {
+            state.activeValueIndex = index;
+            updateSwatchUI();
+            closeValueSlider();
+        }
+
+        function updateSwatchUI() {
+            for (let i = 1; i <= 3; i++) {
+                const el = document.getElementById(`swatch-${i}`);
+                const val = state.values[i];
+                el.style.backgroundColor = `rgb(${val}, ${val}, ${val})`;
+                
+                if (i === state.activeValueIndex) {
+                    el.classList.add('active');
+                } else {
+                    el.classList.remove('active');
+                }
+            }
+        }
+
+        function openValueSlider(index) {
+            state.activeValueIndex = index;
+            state.editingValueIndex = index;
+            updateSwatchUI();
+            popup.classList.remove('hidden');
+            document.getElementById('popup-swatch-id').textContent = `#${index}`;
+            popupSlider.value = state.values[index];
+        }
+
+        function closeValueSlider() {
+            popup.classList.add('hidden');
+            state.editingValueIndex = null;
+        }
+
+        // --- UPDATE PIXELS based on ID Map ---
+        function updateValue(index, newValue) {
+            const oldValue = state.values[index];
+            if (oldValue === newValue) return;
+
+            state.values[index] = newValue;
+            
+            // 1. Get Visual Data
+            const imgData = mainCtx.getImageData(0, 0, mainCanvas.width, mainCanvas.height);
+            const data = imgData.data;
+
+            // 2. Get ID Map Data
+            const idMap = idCtx.getImageData(0, 0, idCanvas.width, idCanvas.height).data;
+
+            // 3. Scan and Replace
+            for (let i = 0; i < data.length; i += 4) {
+                // Check ID Map
+                const r = idMap[i];   // ID 1
+                const g = idMap[i+1]; // ID 2
+                const b = idMap[i+2]; // ID 3
+                // Alpha of the ID stroke (tells us how much this pixel belongs to the group)
+                const idAlpha = idMap[i+3] / 255; 
+
+                // Is this pixel primarily owned by the current Index?
+                let isMatch = false;
+                if (index === 1 && r > g && r > b) isMatch = true;
+                if (index === 2 && g > r && g > b) isMatch = true;
+                if (index === 3 && b > r && b > g) isMatch = true;
+
+                if (isMatch && idAlpha > 0) {
+                    // It's a match! We need to recolor it.
+                    // But we must preserve the visual alpha/blending relative to white.
+                    // Simple approach: The visual pixel is some shade of gray. 
+                    // We assume it's blended with white.
+                    // Current Pixel Intensity `v`
+                    // Target Intensity should be shifted by difference (New - Old).
+                    // But scaled by `idAlpha` so we handle edges gracefully? 
+                    // Actually, simpler: Recalculate based on white BG.
+                    
+                    // Let's use the ID Alpha as the "Opacity" of the stroke
+                    // NewPixel = (1 - idAlpha) * 255 + idAlpha * NewColor
+                    // This creates a perfect reconstruction.
+                    
+                    const newPixelVal = (1 - idAlpha) * 255 + idAlpha * newValue;
+                    
+                    data[i] = newPixelVal;
+                    data[i+1] = newPixelVal;
+                    data[i+2] = newPixelVal;
+                }
+            }
+
+            mainCtx.putImageData(imgData, 0, 0);
+            updateSwatchUI();
+        }
+
+        // --- Studio System ---
+        function addStudio(isFirst = false) {
+            if (state.studios.length >= state.maxStudios) return;
+
+            const id = Date.now() + Math.random();
+            const clone = studioTemplate.content.cloneNode(true);
+            const card = clone.querySelector('.studio-card');
+            const canvas = clone.querySelector('.studio-canvas');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            const slider = clone.querySelector('.prob-slider');
+            const probDisplay = clone.querySelector('.prob-display');
+            const removeBtn = clone.querySelector('.remove-studio-btn');
+            const clearBtn = clone.querySelector('.clear-studio-btn');
+            const addLinkedBtn = clone.querySelector('.add-linked-btn');
+            const hint = clone.querySelector('.empty-hint');
+            const label = clone.querySelector('.studio-label');
+
+            canvas.width = 150;
+            canvas.height = 150;
+
+            const studioObj = {
+                id,
+                card,
+                canvas,
+                ctx,
+                slider,
+                probDisplay,
+                weight: 50,
+                isEmpty: true 
+            };
+
+            if (isFirst) {
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(75, 75, 30, 0, Math.PI * 2);
+                ctx.fill();
+                hint.style.display = 'none';
+                studioObj.weight = 100;
+                slider.value = 100;
+                studioObj.isEmpty = false;
+            }
+
+            state.studios.push(studioObj);
+
+            let isDrawingStudio = false;
+            
+            function drawInStudio(x, y) {
+                ctx.lineWidth = 15;
+                ctx.lineCap = 'round';
+                ctx.strokeStyle = 'black';
+                
+                ctx.lineTo(x, y);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                hint.style.display = 'none';
+                studioObj.isEmpty = false; 
+            }
+
+            const getStudioPos = (e, cvs) => {
+                const rect = cvs.getBoundingClientRect();
+                const scaleX = cvs.width / rect.width;
+                const scaleY = cvs.height / rect.height;
+                return {
+                    x: (e.clientX - rect.left) * scaleX,
+                    y: (e.clientY - rect.top) * scaleY
+                };
+            };
+
+            canvas.addEventListener('mousedown', (e) => {
+                isDrawingStudio = true;
+                ctx.beginPath();
+                const pos = getStudioPos(e, canvas);
+                drawInStudio(pos.x, pos.y);
+            });
+            canvas.addEventListener('mousemove', (e) => {
+                if (!isDrawingStudio) return;
+                const pos = getStudioPos(e, canvas);
+                drawInStudio(pos.x, pos.y);
+            });
+            window.addEventListener('mouseup', () => {
+                isDrawingStudio = false;
+                ctx.beginPath();
+            });
+
+            slider.addEventListener('input', (e) => {
+                studioObj.weight = parseInt(e.target.value);
+                updateProbabilities();
+            });
+
+            clearBtn.addEventListener('click', () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                hint.style.display = 'flex';
+                studioObj.isEmpty = true; 
+            });
+
+            removeBtn.addEventListener('click', () => {
+                removeStudio(id);
+            });
+
+            addLinkedBtn.addEventListener('click', () => {
+                addStudio();
+            });
+
+            studiosContainer.appendChild(card);
+            updateUI();
+            updateProbabilities();
+        }
+
+        function removeStudio(id) {
+            const index = state.studios.findIndex(s => s.id === id);
+            if (index > -1) {
+                state.studios[index].card.remove();
+                state.studios.splice(index, 1);
+                updateUI();
+                updateProbabilities();
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('studio-count').textContent = state.studios.length;
+            state.studios.forEach((s, index) => {
+                s.card.querySelector('.studio-label').textContent = `Studio #${index + 1}`;
+                const removeBtn = s.card.querySelector('.remove-studio-btn');
+                if (state.studios.length > 1) removeBtn.classList.remove('hidden');
+                else removeBtn.classList.add('hidden');
+                const addBtn = s.card.querySelector('.add-linked-btn');
+                if (state.studios.length < state.maxStudios) addBtn.classList.remove('hidden');
+                else addBtn.classList.add('hidden');
+            });
+            if (state.studios.length >= state.maxStudios) addStudioMainBtn.style.display = 'none';
+            else addStudioMainBtn.style.display = 'flex';
+        }
+
+        function updateProbabilities() {
+            const totalWeight = state.studios.reduce((sum, s) => sum + s.weight, 0);
+            state.studios.forEach(s => {
+                let percent = 0;
+                if (totalWeight > 0) percent = Math.round((s.weight / totalWeight) * 100);
+                s.probDisplay.textContent = `${percent}%`;
             });
         }
 
-        attachFastClick('undoBtn', () => {
-            if (strokes.length > 0) {
-                const s = strokes.pop();
-                redoStack.push(s);
-                requestAnimationFrame(draw);
+        // --- Main Drawing Logic ---
+
+        let lastPos = { x: 0, y: 0 };
+
+        function getMainPos(e) {
+            const clientX = e.clientX || e.touches?.[0]?.clientX;
+            const clientY = e.clientY || e.touches?.[0]?.clientY;
+            const rect = mainCanvas.getBoundingClientRect();
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+
+        function startMainDraw(e) {
+            state.isDrawingMain = true;
+            lastPos = getMainPos(e);
+            drawStamp(lastPos.x, lastPos.y);
+
+            if (state.flowRate > 0) {
+                clearInterval(state.flowInterval);
+                const intervalTime = 1000 / state.flowRate;
+                state.flowInterval = setInterval(() => {
+                    if (state.isDrawingMain) drawStamp(lastPos.x, lastPos.y);
+                }, intervalTime);
             }
-        });
+        }
 
-        attachFastClick('redoBtn', () => {
-            if (redoStack.length > 0) {
-                const s = redoStack.pop();
-                strokes.push(s);
-                requestAnimationFrame(draw);
+        function drawMain(e) {
+            if (!state.isDrawingMain) return;
+            const currentPos = getMainPos(e);
+            
+            if (state.flowRate > 0) {
+                lastPos = currentPos;
+                return;
             }
-        });
 
-        attachFastClick('resetViewBtn', () => {
-            camera = { x: window.innerWidth/2, y: window.innerHeight/2, zoom: 0.35, angle: 0 };
-            requestAnimationFrame(draw);
-        });
+            const dist = Math.hypot(currentPos.x - lastPos.x, currentPos.y - lastPos.y);
+            const step = Math.max(1, state.mainBrushSize * (state.brushSpacing / 100));
 
-        attachFastClick('clearBtn', () => {
-            if(confirm("Delete all drawings?")) {
-                strokes = [];
-                redoStack = [];
-                requestAnimationFrame(draw);
+            for (let i = 0; i < dist; i += step) {
+                const cx = lastPos.x + (currentPos.x - lastPos.x) * (i / dist);
+                const cy = lastPos.y + (currentPos.y - lastPos.y) * (i / dist);
+                drawStamp(cx, cy);
             }
-        });
+            lastPos = currentPos;
+        }
 
-        document.getElementById('colorPicker').addEventListener('input', (e) => {
-            brushColor = e.target.value;
-        });
+        function stopMainDraw() {
+            if (state.isDrawingMain) {
+                state.isDrawingMain = false;
+                clearInterval(state.flowInterval);
+                saveState();
+            }
+        }
+
+        function drawStamp(x, y) {
+            const size = state.mainBrushSize;
+            
+            const allEmpty = state.studios.every(s => s.isEmpty);
+            const activeGrayVal = state.values[state.activeValueIndex];
+            const activeColor = `rgb(${activeGrayVal}, ${activeGrayVal}, ${activeGrayVal})`;
+            
+            // Map ID to Color Channel (R, G, B)
+            const idColor = state.activeValueIndex === 1 ? 'rgb(255,0,0)' 
+                          : state.activeValueIndex === 2 ? 'rgb(0,255,0)' 
+                          : 'rgb(0,0,255)';
+
+            // Prepare the Stamp Image
+            let sourceCanvas = null;
+            let studio = null;
+
+            if (allEmpty) {
+                // Generate a circle stamp on the fly
+                if (tintCanvas.width !== size || tintCanvas.height !== size) {
+                    tintCanvas.width = size; tintCanvas.height = size;
+                }
+                tintCtx.clearRect(0,0,size,size);
+                tintCtx.beginPath();
+                tintCtx.arc(size/2, size/2, size/2, 0, Math.PI*2);
+                tintCtx.fillStyle = 'black'; 
+                tintCtx.fill();
+                sourceCanvas = tintCanvas;
+            } else {
+                studio = pickRandomStudio();
+                if(studio) sourceCanvas = studio.canvas;
+            }
+
+            if (!sourceCanvas) return;
+
+            // --- Drawing Logic ---
+            
+            if (state.tool === 'eraser') {
+                // Erase from Main Canvas
+                mainCtx.globalCompositeOperation = 'destination-out';
+                mainCtx.drawImage(sourceCanvas, x - size/2, y - size/2, size, size);
+                mainCtx.globalCompositeOperation = 'source-over';
+                
+                // Erase from ID Canvas (Clear ownership)
+                idCtx.globalCompositeOperation = 'destination-out';
+                idCtx.drawImage(sourceCanvas, x - size/2, y - size/2, size, size);
+                idCtx.globalCompositeOperation = 'source-over';
+
+            } else {
+                // Brush: Draw normally to Main Canvas
+                // 1. Prepare visual stamp
+                if (tintCanvas.width !== size || tintCanvas.height !== size) {
+                    tintCanvas.width = size; tintCanvas.height = size;
+                }
+                tintCtx.clearRect(0, 0, size, size);
+                tintCtx.globalCompositeOperation = 'source-over';
+                tintCtx.drawImage(sourceCanvas, 0, 0, size, size);
+                tintCtx.globalCompositeOperation = 'source-in';
+                tintCtx.fillStyle = activeColor;
+                tintCtx.fillRect(0, 0, size, size);
+                
+                mainCtx.globalCompositeOperation = 'source-over';
+                mainCtx.drawImage(tintCanvas, x - size/2, y - size/2);
+
+                // 2. Draw ID stamp to ID Canvas
+                tintCtx.globalCompositeOperation = 'source-over';
+                tintCtx.clearRect(0, 0, size, size);
+                tintCtx.drawImage(sourceCanvas, 0, 0, size, size);
+                tintCtx.globalCompositeOperation = 'source-in';
+                tintCtx.fillStyle = idColor;
+                tintCtx.fillRect(0, 0, size, size);
+                
+                // Note: We use source-over for ID map so new strokes claim ownership
+                idCtx.globalCompositeOperation = 'source-over';
+                idCtx.drawImage(tintCanvas, x - size/2, y - size/2);
+            }
+        }
+
+        function pickRandomStudio() {
+            const totalWeight = state.studios.reduce((sum, s) => sum + s.weight, 0);
+            if (totalWeight === 0) return state.studios[0]; 
+
+            let random = Math.random() * totalWeight;
+            for (const studio of state.studios) {
+                if (random < studio.weight) return studio;
+                random -= studio.weight;
+            }
+            return state.studios[state.studios.length - 1];
+        }
+
+        // --- Tools & Undo ---
+
+        function setTool(t) {
+            state.tool = t;
+            const btnBrush = document.getElementById('btn-brush');
+            const btnEraser = document.getElementById('btn-eraser');
+            
+            if (t === 'brush') {
+                btnBrush.className = "flex items-center justify-center py-2 px-3 bg-blue-600 text-white rounded hover:bg-blue-700 transition active-tool";
+                btnEraser.className = "flex items-center justify-center py-2 px-3 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition";
+            } else {
+                btnBrush.className = "flex items-center justify-center py-2 px-3 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition";
+                btnEraser.className = "flex items-center justify-center py-2 px-3 bg-blue-600 text-white rounded hover:bg-blue-700 transition active-tool";
+            }
+        }
+
+        function saveState() {
+            // Save state of both canvases
+            const frame = {
+                main: mainCanvas.toDataURL(),
+                id: idCanvas.toDataURL()
+            };
+            
+            if (state.historyStep < state.history.length - 1) {
+                state.history = state.history.slice(0, state.historyStep + 1);
+            }
+            
+            state.history.push(frame);
+            if (state.history.length > 20) state.history.shift();
+            else state.historyStep++;
+        }
+
+        function undo() {
+            if (state.historyStep > 0) {
+                state.historyStep--;
+                const frame = state.history[state.historyStep];
+                
+                const imgMain = new Image();
+                const imgId = new Image();
+                
+                let loaded = 0;
+                const done = () => {
+                    loaded++;
+                    if (loaded === 2) {
+                        mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+                        mainCtx.drawImage(imgMain, 0, 0);
+                        idCtx.clearRect(0, 0, idCanvas.width, idCanvas.height);
+                        idCtx.drawImage(imgId, 0, 0);
+                    }
+                };
+
+                imgMain.onload = done;
+                imgId.onload = done;
+                
+                imgMain.src = frame.main;
+                imgId.src = frame.id;
+            }
+        }
+
+        function clearAll() {
+            mainCtx.fillStyle = 'white';
+            mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
+            idCtx.clearRect(0, 0, idCanvas.width, idCanvas.height);
+            saveState();
+        }
+
+        // --- Start ---
+        init();
 
     </script>
 </body>
