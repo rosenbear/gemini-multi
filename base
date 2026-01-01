@@ -12,9 +12,8 @@
             touch-action: none;
         }
         .canvas-bg {
-            background-color: #ffffff;
-            background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
-            background-size: 20px 20px;
+            /* Fallback background */
+            background-color: #ffffff; 
         }
         .studio-canvas-container {
             background-color: white;
@@ -128,6 +127,14 @@
                 <div class="text-[10px] font-bold text-gray-400 uppercase text-center mb-1">Values</div>
                 
                 <div class="flex gap-2">
+                    <!-- Swatch 0 (Background) -->
+                    <div class="relative group">
+                        <div id="swatch-0" class="swatch w-10 h-10 rounded border-2 border-gray-300 shadow cursor-pointer" onclick="openValueSlider(0)"></div>
+                        <span class="absolute -bottom-4 left-1/2 transform -translate-x-1/2 text-[10px] text-gray-500 font-bold">BG</span>
+                    </div>
+
+                    <div class="w-px bg-gray-300 mx-1"></div>
+
                     <!-- Swatch 1 (Dark) -->
                     <div class="relative group">
                         <div id="swatch-1" class="swatch w-10 h-10 rounded border-2 border-white shadow cursor-pointer active" onclick="openValueSlider(1)"></div>
@@ -216,13 +223,14 @@
             history: [],
             historyStep: -1,
             maxStudios: 6,
+            backgroundValue: 255, // 0-255
             values: {
                 1: 30,  // Dark
                 2: 128, // Medium
                 3: 220  // Light
             },
-            activeValueIndex: 1, // 1, 2, or 3
-            editingValueIndex: null
+            activeValueIndex: 1, // 1, 2, or 3 (0 is BG, select only for edit)
+            editingValueIndex: null // 0, 1, 2, 3
         };
 
         // --- DOM Elements ---
@@ -299,34 +307,36 @@
 
             // Value Slider Logic
             popupSlider.addEventListener('input', (e) => {
-                if (state.editingValueIndex) {
+                if (state.editingValueIndex !== null) {
                     let newVal = parseInt(e.target.value);
                     const idx = state.editingValueIndex;
-                    const buffer = 8; // Buffer to keep values distinct
+                    const buffer = 8; 
 
-                    // Constraint Logic: Stop slider before overlapping neighbors
+                    // Constraint Logic (only for 1, 2, 3)
                     if (idx === 1) {
-                        // 1 must stay below 2
                         const maxLimit = state.values[2] - buffer;
                         if (newVal > maxLimit) newVal = maxLimit;
                     } else if (idx === 2) {
-                        // 2 must stay between 1 and 3
                         const minLimit = state.values[1] + buffer;
                         const maxLimit = state.values[3] - buffer;
                         if (newVal < minLimit) newVal = minLimit;
                         if (newVal > maxLimit) newVal = maxLimit;
                     } else if (idx === 3) {
-                        // 3 must stay above 2
                         const minLimit = state.values[2] + buffer;
                         if (newVal < minLimit) newVal = minLimit;
                     }
+                    // Note: idx === 0 (BG) has NO constraints.
 
-                    // Force the slider UI to respect the clamped value
+                    // Force slider UI
                     if (parseInt(e.target.value) !== newVal) {
                         e.target.value = newVal;
                     }
 
-                    updateValue(state.editingValueIndex, newVal);
+                    if (idx === 0) {
+                        updateBackground(newVal);
+                    } else {
+                        updateValue(idx, newVal);
+                    }
                 }
             });
             popupSlider.addEventListener('change', () => {
@@ -334,7 +344,7 @@
             });
 
             updateSwatchUI();
-            saveState(); // Initial state
+            saveState(); 
         }
 
         // --- Canvas Resizing ---
@@ -366,8 +376,9 @@
                  mainCtx.drawImage(tempMain, 0, 0);
                  idCtx.drawImage(tempId, 0, 0);
             } else {
-                // Fill white on first init
-                mainCtx.fillStyle = '#ffffff';
+                // Fill with background value
+                const bg = state.backgroundValue;
+                mainCtx.fillStyle = `rgb(${bg},${bg},${bg})`;
                 mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
                 // Clear ID canvas (transparent)
                 idCtx.clearRect(0, 0, idCanvas.width, idCanvas.height);
@@ -384,13 +395,29 @@
         }
 
         function updateSwatchUI() {
+            // Background Swatch
+            const bgEl = document.getElementById('swatch-0');
+            const bgVal = state.backgroundValue;
+            bgEl.style.backgroundColor = `rgb(${bgVal}, ${bgVal}, ${bgVal})`;
+            if (state.editingValueIndex === 0) {
+                bgEl.classList.add('active');
+            } else {
+                bgEl.classList.remove('active');
+            }
+
+            // Foreground Swatches
             for (let i = 1; i <= 3; i++) {
                 const el = document.getElementById(`swatch-${i}`);
                 const val = state.values[i];
                 el.style.backgroundColor = `rgb(${val}, ${val}, ${val})`;
                 
+                // Only mark active if we are using it OR editing it
+                // We keep activeValueIndex visible as "Selected Tool"
+                // editingValueIndex is for "Slider Popup"
                 if (i === state.activeValueIndex) {
                     el.classList.add('active');
+                    // Add extra ring if editing to distinguish?
+                    // Currently .active does everything.
                 } else {
                     el.classList.remove('active');
                 }
@@ -398,17 +425,59 @@
         }
 
         function openValueSlider(index) {
-            state.activeValueIndex = index;
             state.editingValueIndex = index;
+            // If it's 1, 2, or 3, also make it the active drawing value
+            if (index > 0) state.activeValueIndex = index;
+            
             updateSwatchUI();
+            
             popup.classList.remove('hidden');
-            document.getElementById('popup-swatch-id').textContent = `#${index}`;
-            popupSlider.value = state.values[index];
+            const label = index === 0 ? "BG" : `#${index}`;
+            document.getElementById('popup-swatch-id').textContent = label;
+            
+            if (index === 0) popupSlider.value = state.backgroundValue;
+            else popupSlider.value = state.values[index];
         }
 
         function closeValueSlider() {
             popup.classList.add('hidden');
             state.editingValueIndex = null;
+            updateSwatchUI();
+        }
+
+        // --- UPDATE BACKGROUND ---
+        function updateBackground(newBG) {
+            if (state.backgroundValue === newBG) return;
+            state.backgroundValue = newBG;
+
+            // Redraw the entire canvas: (1-alpha)*BG + alpha*Ink
+            const imgData = mainCtx.getImageData(0, 0, mainCanvas.width, mainCanvas.height);
+            const data = imgData.data;
+            const idMap = idCtx.getImageData(0, 0, idCanvas.width, idCanvas.height).data;
+
+            for (let i = 0; i < data.length; i += 4) {
+                const r = idMap[i];
+                const g = idMap[i+1];
+                const b = idMap[i+2];
+                const idAlpha = idMap[i+3] / 255;
+
+                // Find ink color
+                let inkVal = 255; 
+                // Determine dominant ID for ink color lookup
+                if (r > g && r > b) inkVal = state.values[1];
+                else if (g > r && g > b) inkVal = state.values[2];
+                else if (b > r && b > g) inkVal = state.values[3];
+
+                const newPixelVal = (1 - idAlpha) * newBG + idAlpha * inkVal;
+                
+                data[i] = newPixelVal;
+                data[i+1] = newPixelVal;
+                data[i+2] = newPixelVal;
+                // FIX: Force Alpha to 255 (Opaque) so transparent holes from eraser get filled with the new BG color
+                data[i+3] = 255;
+            }
+            mainCtx.putImageData(imgData, 0, 0);
+            updateSwatchUI();
         }
 
         // --- UPDATE PIXELS based on ID Map ---
@@ -417,48 +486,38 @@
             if (oldValue === newValue) return;
 
             state.values[index] = newValue;
+            const bg = state.backgroundValue;
             
-            // 1. Get Visual Data
             const imgData = mainCtx.getImageData(0, 0, mainCanvas.width, mainCanvas.height);
             const data = imgData.data;
-
-            // 2. Get ID Map Data
             const idMap = idCtx.getImageData(0, 0, idCanvas.width, idCanvas.height).data;
 
-            // 3. Scan and Replace
             for (let i = 0; i < data.length; i += 4) {
-                // Check ID Map
-                const r = idMap[i];   // ID 1
-                const g = idMap[i+1]; // ID 2
-                const b = idMap[i+2]; // ID 3
-                // Alpha of the ID stroke (tells us how much this pixel belongs to the group)
+                const r = idMap[i];
+                const g = idMap[i+1];
+                const b = idMap[i+2];
                 const idAlpha = idMap[i+3] / 255; 
 
-                // Is this pixel primarily owned by the current Index?
+                // We need to check overlap for ALL pixels to ensure alpha is fixed everywhere
+                // But for performance in updateValue we usually target specific pixels.
+                // However, since we need to ensure compositing is correct, 
+                // we should strictly only check if this pixel involves the Changing Color OR is transparent.
+                
+                // Simplified: We just check if it matches the current ID being changed.
                 let isMatch = false;
                 if (index === 1 && r > g && r > b) isMatch = true;
                 if (index === 2 && g > r && g > b) isMatch = true;
                 if (index === 3 && b > r && b > g) isMatch = true;
 
                 if (isMatch && idAlpha > 0) {
-                    // It's a match! We need to recolor it.
-                    // But we must preserve the visual alpha/blending relative to white.
-                    // Simple approach: The visual pixel is some shade of gray. 
-                    // We assume it's blended with white.
-                    // Current Pixel Intensity `v`
-                    // Target Intensity should be shifted by difference (New - Old).
-                    // But scaled by `idAlpha` so we handle edges gracefully? 
-                    // Actually, simpler: Recalculate based on white BG.
-                    
-                    // Let's use the ID Alpha as the "Opacity" of the stroke
-                    // NewPixel = (1 - idAlpha) * 255 + idAlpha * NewColor
-                    // This creates a perfect reconstruction.
-                    
-                    const newPixelVal = (1 - idAlpha) * 255 + idAlpha * newValue;
+                    // New Pixel = (1 - StrokeOpacity) * Background + StrokeOpacity * NewColor
+                    const newPixelVal = (1 - idAlpha) * bg + idAlpha * newValue;
                     
                     data[i] = newPixelVal;
                     data[i+1] = newPixelVal;
                     data[i+2] = newPixelVal;
+                    // Fix Alpha here too just in case
+                    data[i+3] = 255;
                 }
             }
 
@@ -768,10 +827,11 @@
         }
 
         function saveState() {
-            // Save state of both canvases
+            // Save state of both canvases AND background value
             const frame = {
                 main: mainCanvas.toDataURL(),
-                id: idCanvas.toDataURL()
+                id: idCanvas.toDataURL(),
+                bg: state.backgroundValue
             };
             
             if (state.historyStep < state.history.length - 1) {
@@ -788,6 +848,12 @@
                 state.historyStep--;
                 const frame = state.history[state.historyStep];
                 
+                // Restore BG
+                if (frame.bg !== undefined) {
+                    state.backgroundValue = frame.bg;
+                    updateSwatchUI();
+                }
+
                 const imgMain = new Image();
                 const imgId = new Image();
                 
@@ -811,7 +877,8 @@
         }
 
         function clearAll() {
-            mainCtx.fillStyle = 'white';
+            const bg = state.backgroundValue;
+            mainCtx.fillStyle = `rgb(${bg}, ${bg}, ${bg})`;
             mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
             idCtx.clearRect(0, 0, idCanvas.width, idCanvas.height);
             saveState();
