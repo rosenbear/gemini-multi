@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Pro Pencil Board</title>
+    <style>
+        :root {
+            --toolbar-bg: rgba(40, 40, 40, 0.95);
+            --active-color: #007AFF;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #555;
+            font-family: -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            touch-action: none; /* Disables browser gestures */
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            cursor: crosshair;
+        }
+
+        /* --- Toolbar --- */
+        .toolbar {
+            position: absolute;
+            top: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--toolbar-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 8px 16px;
+            border-radius: 50px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            z-index: 100;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        /* Button Styling */
+        .tool-btn {
+            background: #3a3a3a;
+            border: none;
+            color: #eee;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.1s ease-out;
+        }
+
+        /* Visual Feedback for Touch */
+        .tool-btn:active, .tool-btn.pressed {
+            transform: scale(0.9);
+            background-color: #555;
+            color: white;
+        }
+
+        .tool-btn svg {
+            width: 24px;
+            height: 24px;
+            pointer-events: none; /* Ensure clicks pass to button */
+        }
+
+        .separator {
+            width: 1px; 
+            height: 24px; 
+            background: rgba(255,255,255,0.2); 
+            margin: 0 4px;
+        }
+
+        /* Color Picker Reset */
+        .color-wrapper {
+            position: relative;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            overflow: hidden;
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+        
+        input[type="color"] {
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            margin: 0;
+        }
+
+        .info-panel {
+            position: absolute;
+            bottom: 30px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: rgba(255,255,255,0.3);
+            font-size: 13px;
+            font-weight: 500;
+            pointer-events: none;
+            z-index: 5;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+
+    </style>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+    <div id="canvas-container">
+        <canvas id="mainCanvas"></canvas>
+    </div>
+
+    <div class="toolbar">
+        <div class="color-wrapper">
+            <input type="color" id="colorPicker" value="#000000">
+        </div>
+        
+        <div class="separator"></div>
+
+        <button class="tool-btn" id="undoBtn" aria-label="Undo">
+            <i data-lucide="undo-2"></i>
+        </button>
+        <button class="tool-btn" id="redoBtn" aria-label="Redo">
+            <i data-lucide="redo-2"></i>
+        </button>
+        
+        <div class="separator"></div>
+
+        <button class="tool-btn" id="resetViewBtn" aria-label="Reset View">
+            <i data-lucide="maximize"></i>
+        </button>
+        <button class="tool-btn" id="clearBtn" aria-label="Clear" style="color: #ff6b6b;">
+            <i data-lucide="trash-2"></i>
+        </button>
+    </div>
+
+    <div class="info-panel">
+        1 Finger/Pencil to Draw &bull; 2 Fingers to Pan & Zoom
+    </div>
+
+    <script>
+        // Initialize Icons
+        lucide.createIcons();
+
+        // --- Config ---
+        const ARTBOARD_W = 2048;
+        const ARTBOARD_H = 2732;
+        const MAX_HISTORY = 50; // Keep 50 strokes in memory
+        
+        // --- State ---
+        const canvas = document.getElementById('mainCanvas');
+        // Removed 'desynchronized' to ensure maximum compatibility with standard rendering loops
+        const ctx = canvas.getContext('2d', { alpha: false }); 
+        
+        // Data Structures
+        let strokes = [];
+        let redoStack = [];
+        
+        // Viewport (Camera)
+        let camera = { x: window.innerWidth/2, y: window.innerHeight/2, zoom: 0.35, angle: 0 };
+        
+        // Interaction
+        let activePointers = new Map();
+        let isDrawing = false;
+        let currentStroke = null;
+        let brushColor = '#000000';
+        let brushSize = 4;
+
+        // --- Setup ---
+        function resize() {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
+            canvas.style.width = window.innerWidth + 'px';
+            canvas.style.height = window.innerHeight + 'px';
+            ctx.scale(1, 1); // Reset default scale
+            requestAnimationFrame(draw);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- Core Rendering ---
+        function draw() {
+            // 1. Reset & Clear
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.fillStyle = '#555555';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 2. Apply Camera Transform
+            // We use standard 2D transforms. 
+            // Translate to center -> Rotate -> Scale -> Translate back
+            const dpr = window.devicePixelRatio;
+            
+            ctx.translate(camera.x * dpr, camera.y * dpr);
+            ctx.rotate(camera.angle);
+            ctx.scale(camera.zoom, camera.zoom);
+
+            // 3. Draw Artboard (The Paper)
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 100 * camera.zoom; // Scale shadow with zoom for realism
+            ctx.fillRect(-ARTBOARD_W/2, -ARTBOARD_H/2, ARTBOARD_W, ARTBOARD_H);
+            ctx.shadowBlur = 0;
+
+            // 4. Draw Strokes
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            // Helper to render a single stroke path
+            const renderStroke = (s) => {
+                if(s.points.length === 0) return;
+
+                ctx.beginPath();
+                ctx.strokeStyle = s.color;
+                ctx.fillStyle = s.color;
+                ctx.lineWidth = s.size;
+
+                if (s.points.length === 1) {
+                    // Draw Dot
+                    ctx.arc(s.points[0].x, s.points[0].y, s.size/2, 0, Math.PI*2);
+                    ctx.fill();
+                } else {
+                    // Draw Line
+                    ctx.moveTo(s.points[0].x, s.points[0].y);
+                    // Smooth curves using quadratic Bezier
+                    for (let i = 1; i < s.points.length - 1; i++) {
+                        const p1 = s.points[i];
+                        const p2 = s.points[i+1];
+                        const midX = (p1.x + p2.x) / 2;
+                        const midY = (p1.y + p2.y) / 2;
+                        ctx.quadraticCurveTo(p1.x, p1.y, midX, midY);
+                    }
+                    // Connect last point
+                    const last = s.points[s.points.length-1];
+                    ctx.lineTo(last.x, last.y);
+                    ctx.stroke();
+                }
+            };
+
+            // Batch render static strokes
+            for(let s of strokes) renderStroke(s);
+            
+            // Render active stroke
+            if(currentStroke) renderStroke(currentStroke);
+        }
+
+
+        // --- Coordinate Math ---
+        function toWorld(screenX, screenY) {
+            const dpr = window.devicePixelRatio;
+            // 1. Translate relative to camera center
+            let x = (screenX * dpr) - (camera.x * dpr);
+            let y = (screenY * dpr) - (camera.y * dpr);
+            
+            // 2. Un-rotate
+            const cos = Math.cos(-camera.angle);
+            const sin = Math.sin(-camera.angle);
+            let rx = x * cos - y * sin;
+            let ry = x * sin + y * cos;
+
+            // 3. Un-scale
+            return { x: rx / camera.zoom, y: ry / camera.zoom };
+        }
+
+        // --- Interaction Logic ---
+        
+        // Gesture State
+        let prevDist = 0;
+        let prevAngle = 0;
+        let prevMid = {x:0, y:0};
+
+        canvas.addEventListener('pointerdown', e => {
+            // Important: We capture pointer to track it even if it leaves canvas bounds
+            canvas.setPointerCapture(e.pointerId);
+            activePointers.set(e.pointerId, e);
+
+            if (activePointers.size === 1) {
+                // START DRAWING
+                const pos = toWorld(e.clientX, e.clientY);
+                const pressure = e.pressure || 0.5;
+                
+                isDrawing = true;
+                currentStroke = {
+                    color: brushColor,
+                    size: brushSize * (0.5 + pressure), // Simple pressure dynamics
+                    points: [{x: pos.x, y: pos.y}]
+                };
+            } else if (activePointers.size === 2) {
+                // START GESTURE (Cancel drawing)
+                isDrawing = false;
+                currentStroke = null;
+                
+                // Init Gesture Math
+                const p = Array.from(activePointers.values());
+                prevDist = Math.hypot(p[0].clientX - p[1].clientX, p[0].clientY - p[1].clientY);
+                prevAngle = Math.atan2(p[1].clientY - p[0].clientY, p[1].clientX - p[0].clientX);
+                prevMid = {
+                    x: (p[0].clientX + p[1].clientX)/2, 
+                    y: (p[0].clientY + p[1].clientY)/2
+                };
+            }
+            requestAnimationFrame(draw);
+        });
+
+        canvas.addEventListener('pointermove', e => {
+            if (!activePointers.has(e.pointerId)) return;
+            activePointers.set(e.pointerId, e);
+
+            if (activePointers.size === 1 && isDrawing && currentStroke) {
+                // DRAWING
+                // Use Coalesced Events for 120Hz smooth curves on iPad
+                const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+                
+                for(let ev of events) {
+                    const pos = toWorld(ev.clientX, ev.clientY);
+                    currentStroke.points.push({x: pos.x, y: pos.y});
+                }
+            } 
+            else if (activePointers.size === 2) {
+                // PAN / ZOOM / ROTATE
+                const p = Array.from(activePointers.values());
+                const curDist = Math.hypot(p[0].clientX - p[1].clientX, p[0].clientY - p[1].clientY);
+                const curAngle = Math.atan2(p[1].clientY - p[0].clientY, p[1].clientX - p[0].clientX);
+                const curMid = {
+                    x: (p[0].clientX + p[1].clientX)/2, 
+                    y: (p[0].clientY + p[1].clientY)/2
+                };
+
+                // 1. Pan
+                const dx = curMid.x - prevMid.x;
+                const dy = curMid.y - prevMid.y;
+                camera.x += dx / window.devicePixelRatio;
+                camera.y += dy / window.devicePixelRatio;
+
+                // 2. Zoom
+                const scale = curDist / prevDist;
+                camera.zoom *= scale;
+                camera.zoom = Math.max(0.05, Math.min(8, camera.zoom)); // Limits
+
+                // 3. Rotate
+                camera.angle += (curAngle - prevAngle);
+
+                // Update prev
+                prevDist = curDist;
+                prevAngle = curAngle;
+                prevMid = curMid;
+            }
+            requestAnimationFrame(draw);
+        });
+
+        const endStroke = (e) => {
+            activePointers.delete(e.pointerId);
+            
+            if (isDrawing && currentStroke) {
+                // Only save if it has points
+                if (currentStroke.points.length > 0) {
+                    strokes.push(currentStroke);
+                    if(strokes.length > MAX_HISTORY) strokes.shift(); // Keep memory clean
+                    redoStack = []; // New action clears redo
+                }
+                currentStroke = null;
+                isDrawing = false;
+            }
+            requestAnimationFrame(draw);
+        };
+
+        canvas.addEventListener('pointerup', endStroke);
+        canvas.addEventListener('pointercancel', endStroke);
+        canvas.addEventListener('pointerout', (e) => {
+            // Only end if we actually left the window/iframe
+            // 'pointerout' can fire when entering a child element, 
+            // but canvas has no children.
+            if (e.relatedTarget === null) endStroke(e); 
+        });
+
+
+        // --- UI Interactions (The Fix) ---
+
+        // We use a helper to prevent 'click' lag and issues on iPad
+        function attachFastClick(id, callback) {
+            const btn = document.getElementById(id);
+            // pointerup is more reliable than click for custom UI on touch screens
+            // when preventDefault is used elsewhere
+            btn.addEventListener('pointerup', (e) => {
+                // Visual pop
+                btn.classList.add('pressed');
+                setTimeout(() => btn.classList.remove('pressed'), 150);
+                callback(e);
+            });
+        }
+
+        attachFastClick('undoBtn', () => {
+            if (strokes.length > 0) {
+                const s = strokes.pop();
+                redoStack.push(s);
+                requestAnimationFrame(draw);
+            }
+        });
+
+        attachFastClick('redoBtn', () => {
+            if (redoStack.length > 0) {
+                const s = redoStack.pop();
+                strokes.push(s);
+                requestAnimationFrame(draw);
+            }
+        });
+
+        attachFastClick('resetViewBtn', () => {
+            camera = { x: window.innerWidth/2, y: window.innerHeight/2, zoom: 0.35, angle: 0 };
+            requestAnimationFrame(draw);
+        });
+
+        attachFastClick('clearBtn', () => {
+            if(confirm("Delete all drawings?")) {
+                strokes = [];
+                redoStack = [];
+                requestAnimationFrame(draw);
+            }
+        });
+
+        document.getElementById('colorPicker').addEventListener('input', (e) => {
+            brushColor = e.target.value;
+        });
+
+    </script>
+</body>
+</html>
